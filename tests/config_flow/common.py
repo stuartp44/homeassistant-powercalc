@@ -10,27 +10,38 @@ from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.typing import ConfigType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.powercalc import DiscoveryManager
+from custom_components.powercalc.common import SourceEntity
 from custom_components.powercalc.config_flow import (
+    CONF_CONFIRM_AUTODISCOVERED_MODEL,
     DOMAIN,
+    Steps,
 )
 from custom_components.powercalc.const import (
     CONF_CREATE_ENERGY_SENSOR,
     CONF_CREATE_UTILITY_METERS,
     CONF_ENERGY_INTEGRATION_METHOD,
+    CONF_MANUFACTURER,
     CONF_MODE,
+    CONF_MODEL,
     CONF_SENSOR_TYPE,
+    DISCOVERY_POWER_PROFILE,
+    DISCOVERY_SOURCE_ENTITY,
     ENERGY_INTEGRATION_METHOD_LEFT,
     CalculationStrategy,
     SensorType,
 )
+from custom_components.powercalc.power_profile.factory import get_power_profile
+from custom_components.powercalc.power_profile.power_profile import PowerProfile
 
 DEFAULT_ENTITY_ID = "light.test"
 DEFAULT_UNIQUE_ID = "7c009ef6829f"
 
 
-async def select_sensor_type(
+async def select_menu_item(
     hass: HomeAssistant,
-    sensor_type: SensorType,
+    menu_item: Steps,
+    next_step_id: Steps | None = None,
 ) -> FlowResult:
     """Select a sensor type from the menu"""
     result = await hass.config_entries.flow.async_init(
@@ -40,11 +51,21 @@ async def select_sensor_type(
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        {"next_step_id": sensor_type},
+        {"next_step_id": menu_item},
     )
 
-    assert result["type"] == data_entry_flow.FlowResultType.FORM
-    assert result["step_id"] == sensor_type
+    if menu_item == Steps.MENU_GROUP:
+        assert result["type"] == data_entry_flow.FlowResultType.MENU
+    else:
+        assert result["type"] == data_entry_flow.FlowResultType.FORM
+
+    if next_step_id:
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {"next_step_id": next_step_id},
+        )
+        assert result["type"] == data_entry_flow.FlowResultType.FORM
+        assert result["step_id"] == next_step_id
 
     return result
 
@@ -52,17 +73,61 @@ async def select_sensor_type(
 async def initialize_options_flow(
     hass: HomeAssistant,
     entry: config_entries.ConfigEntry,
+    selected_menu_item: Steps,
 ) -> FlowResult:
-    await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
+    if entry.state != config_entries.ConfigEntryState.LOADED:
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
     result = await hass.config_entries.options.async_init(
         entry.entry_id,
         data=None,
     )
 
+    assert result["type"] == data_entry_flow.FlowResultType.MENU
+    assert result["step_id"] == Steps.INIT
+    assert selected_menu_item in result["menu_options"]
+
+    return await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {"next_step_id": selected_menu_item},
+    )
+
+
+async def initialize_discovery_flow(
+    hass: HomeAssistant,
+    source_entity: SourceEntity,
+    power_profile: PowerProfile | None = None,
+    confirm_autodiscovered_model: bool = False,
+) -> FlowResult:
+    discovery_manager: DiscoveryManager = DiscoveryManager(hass, {})
+    if not power_profile:
+        power_profile = await get_power_profile(
+            hass,
+            {},
+            await discovery_manager.autodiscover_model(source_entity.entity_entry),
+        )
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": config_entries.SOURCE_INTEGRATION_DISCOVERY},
+        data={
+            # CONF_UNIQUE_ID: DEFAULT_UNIQUE_ID,
+            CONF_NAME: "test",
+            CONF_ENTITY_ID: DEFAULT_ENTITY_ID,
+            CONF_MANUFACTURER: power_profile.manufacturer,
+            CONF_MODEL: power_profile.model,
+            DISCOVERY_SOURCE_ENTITY: source_entity,
+            DISCOVERY_POWER_PROFILE: power_profile,
+        },
+    )
+    if not confirm_autodiscovered_model:
+        return result
+
     assert result["type"] == data_entry_flow.FlowResultType.FORM
-    assert result["step_id"] == "init"
-    return result
+    return await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_CONFIRM_AUTODISCOVERED_MODEL: True},
+    )
 
 
 async def goto_virtual_power_strategy_step(
@@ -84,7 +149,7 @@ async def goto_virtual_power_strategy_step(
     elif CONF_MODE not in user_input:
         user_input[CONF_MODE] = strategy
 
-    result = await select_sensor_type(hass, SensorType.VIRTUAL_POWER)
+    result = await select_menu_item(hass, Steps.VIRTUAL_POWER)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         user_input,

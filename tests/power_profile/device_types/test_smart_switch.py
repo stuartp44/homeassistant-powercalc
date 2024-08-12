@@ -5,7 +5,7 @@ from homeassistant.const import CONF_ENTITY_ID, STATE_OFF, STATE_ON
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 
-from custom_components.powercalc.config_flow import CONF_CONFIRM_AUTODISCOVERED_MODEL
+from custom_components.powercalc.config_flow import CONF_CONFIRM_AUTODISCOVERED_MODEL, Steps
 from custom_components.powercalc.const import (
     CONF_CUSTOM_MODEL_DIRECTORY,
     CONF_FIXED,
@@ -15,6 +15,7 @@ from custom_components.powercalc.const import (
     DOMAIN,
 )
 from tests.common import get_test_profile_dir, run_powercalc_setup
+from tests.config_flow.common import initialize_options_flow
 from tests.conftest import MockEntityWithModel
 
 
@@ -136,14 +137,14 @@ async def test_smart_switch_power_input_gui_config_flow(
     flows = hass.config_entries.flow.async_progress_by_handler(DOMAIN)
     flow = flows[0]
 
-    assert flow["step_id"] == "library"
+    assert flow["step_id"] == Steps.LIBRARY
     result = await hass.config_entries.flow.async_configure(
         flow["flow_id"],
         {CONF_CONFIRM_AUTODISCOVERED_MODEL: True},
     )
 
     # After confirming the manufacturer/model we must be directed to the fixed config step
-    assert result["step_id"] == "fixed"
+    assert result["step_id"] == Steps.FIXED
     result = await hass.config_entries.flow.async_configure(
         flow["flow_id"],
         {CONF_POWER: 50},
@@ -170,10 +171,7 @@ async def test_smart_switch_power_input_gui_config_flow(
     assert hass.states.get(power_sensor_id).state == "0.23"
 
     # Change the power value via the options
-    result = await hass.config_entries.options.async_init(
-        config_entry.entry_id,
-        data=None,
-    )
+    result = await initialize_options_flow(hass, config_entry, Steps.FIXED)
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         user_input={CONF_POWER: 100},

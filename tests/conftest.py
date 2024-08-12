@@ -106,8 +106,7 @@ class MockEntityWithModel(Protocol):
         manufacturer: str = "signify",
         model: str = "LCT010",
         **entity_reg_kwargs: Any,  # noqa: ANN401
-    ) -> None:
-        ...
+    ) -> None: ...
 
 
 @pytest.fixture
@@ -119,6 +118,9 @@ def mock_entity_with_model_information(hass: HomeAssistant) -> MockEntityWithMod
         **entity_reg_kwargs: Any,  # noqa: ANN401
     ) -> None:
         device_id = str(uuid.uuid4())
+        if "device_id" in entity_reg_kwargs:
+            device_id = entity_reg_kwargs["device_id"]
+            del entity_reg_kwargs["device_id"]
 
         unique_id = str(uuid.uuid4())
         if "unique_id" in entity_reg_kwargs:
@@ -175,5 +177,6 @@ def mock_remote_loader(request: SubRequest) -> Generator:
         def load_library_json() -> dict:
             with open(get_library_json_path()) as f:
                 return json.load(f)
+
         mock_load_lib.side_effect = load_library_json
         yield

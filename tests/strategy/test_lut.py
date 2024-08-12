@@ -95,6 +95,28 @@ async def test_hs_lut(hass: HomeAssistant) -> None:
     )
 
 
+async def test_hs_lut_attribute_none(hass: HomeAssistant, caplog: pytest.LogCaptureFixture) -> None:
+    """Test error is logged when hs_color attribute is None"""
+
+    caplog.set_level(logging.ERROR)
+    source_entity = create_source_entity(LIGHT_DOMAIN, [ColorMode.HS])
+
+    strategy = await _create_lut_strategy(hass, "signify", "LCT010", source_entity)
+    await strategy.validate_config()
+
+    state = State(
+        "light.test",
+        STATE_ON,
+        {
+            ATTR_COLOR_MODE: ColorMode.HS,
+            ATTR_BRIGHTNESS: 122,
+            ATTR_HS_COLOR: None,
+        },
+    )
+    await strategy.calculate(state)
+    assert "Could not calculate power" in caplog.text
+
+
 async def test_sub_lut_loaded(hass: HomeAssistant) -> None:
     source_entity = create_source_entity(
         LIGHT_DOMAIN,
@@ -226,6 +248,32 @@ async def test_fallback_color_temp_to_hs(hass: HomeAssistant) -> None:
     await hass.async_block_till_done()
 
     assert hass.states.get("sensor.test_power").state == "1.42"
+
+
+async def test_warning_is_logged_when_color_mode_is_missing(hass: HomeAssistant, caplog: pytest.LogCaptureFixture) -> None:
+    """
+    Test that a warning is logged when the color_mode attribute is missing.
+    See: https://github.com/bramstroker/homeassistant-powercalc/issues/2323
+    """
+    caplog.set_level(logging.WARNING)
+    strategy = await _create_lut_strategy(hass, "signify", "LCT010")
+
+    state = State("light.test", STATE_ON, {ATTR_BRIGHTNESS: 100})
+    assert not await strategy.calculate(state)
+    assert "color mode unknown" in caplog.text
+
+
+async def test_warning_is_logged_when_color_mode_is_none(hass: HomeAssistant, caplog: pytest.LogCaptureFixture) -> None:
+    """
+    Test that a warning is logged when the color_mode attribute is none.
+    See: https://github.com/bramstroker/homeassistant-powercalc/issues/2323
+    """
+    caplog.set_level(logging.WARNING)
+    strategy = await _create_lut_strategy(hass, "signify", "LCT010")
+
+    state = State("light.test", STATE_ON, {ATTR_BRIGHTNESS: 100, ATTR_COLOR_MODE: None})
+    assert not await strategy.calculate(state)
+    assert "color mode unknown" in caplog.text
 
 
 async def _create_lut_strategy(

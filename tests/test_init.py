@@ -5,6 +5,7 @@ from homeassistant.const import (
     CONF_NAME,
     CONF_UNIQUE_ID,
     EVENT_HOMEASSISTANT_STARTED,
+    STATE_UNAVAILABLE,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_registry import EntityRegistry
@@ -65,7 +66,7 @@ async def test_domain_groups(hass: HomeAssistant, entity_reg: EntityRegistry) ->
     assert group_state
     assert group_state.attributes.get(ATTR_ENTITIES) == {"sensor.test_power"}
 
-    assert not hass.states.get("sensor.all_light_power")
+    assert hass.states.get("sensor.all_light_power").state == STATE_UNAVAILABLE
 
     entity_entry = entity_reg.async_get("sensor.all_input_boolean_power")
     assert entity_entry
@@ -183,17 +184,19 @@ async def test_repair_issue_with_none_sensors(hass: HomeAssistant) -> None:
     power_entry = await create_mocked_virtual_power_sensor_entry(hass, "Power")
 
     none_entries = []
-    for i in range(10): # noqa
-        none_entries.append(await setup_config_entry(
-            hass,
-            {
-                CONF_SENSOR_TYPE: SensorType.GROUP,
-                CONF_NAME: "None",
-                CONF_GROUP_MEMBER_SENSORS: [power_entry.entry_id],
-            },
-            "None",
-            "None",
-        ))
+    for i in range(10):  # noqa
+        none_entries.append(
+            await setup_config_entry(
+                hass,
+                {
+                    CONF_SENSOR_TYPE: SensorType.GROUP,
+                    CONF_NAME: "None",
+                    CONF_GROUP_MEMBER_SENSORS: [power_entry.entry_id],
+                },
+                "None",
+                "None",
+            ),
+        )
 
     for entry in none_entries:
         assert hass.config_entries.async_get_entry(entry.entry_id)

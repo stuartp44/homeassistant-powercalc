@@ -10,15 +10,16 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.powercalc import CONF_CREATE_UTILITY_METERS, CONF_UTILITY_METER_TARIFFS, CONF_UTILITY_METER_TYPES, SensorType
+from custom_components.powercalc.config_flow import Steps
 from tests.config_flow.common import (
     create_mock_entry,
     initialize_options_flow,
-    select_sensor_type,
+    select_menu_item,
 )
 
 
 async def test_real_power(hass: HomeAssistant) -> None:
-    result = await select_sensor_type(hass, SensorType.REAL_POWER)
+    result = await select_menu_item(hass, Steps.REAL_POWER)
     assert result["type"] == data_entry_flow.FlowResultType.FORM
 
     result = await hass.config_entries.flow.async_configure(
@@ -69,7 +70,7 @@ async def test_energy_sensor_is_bound_to_power_device(hass: HomeAssistant) -> No
         },
     )
 
-    result = await select_sensor_type(hass, SensorType.REAL_POWER)
+    result = await select_menu_item(hass, Steps.REAL_POWER)
     assert result["type"] == data_entry_flow.FlowResultType.FORM
 
     result = await hass.config_entries.flow.async_configure(
@@ -97,23 +98,27 @@ async def test_real_power_options(hass: HomeAssistant) -> None:
             CONF_NAME: "Some name",
             CONF_ENTITY_ID: "sensor.my_real_power",
             CONF_SENSOR_TYPE: SensorType.REAL_POWER,
+            CONF_CREATE_UTILITY_METERS: False,
         },
     )
 
-    result = await initialize_options_flow(hass, entry)
+    result = await initialize_options_flow(hass, entry, Steps.BASIC_OPTIONS)
+    await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={CONF_CREATE_UTILITY_METERS: True},
+    )
 
-    user_input = {
-        CONF_ENTITY_ID: "sensor.my_new_real_power",
-    }
+    result = await initialize_options_flow(hass, entry, Steps.REAL_POWER)
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
-        user_input=user_input,
+        user_input={CONF_ENTITY_ID: "sensor.my_new_real_power"},
     )
 
     await hass.async_block_till_done()
 
     assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
     assert entry.data[CONF_ENTITY_ID] == "sensor.my_new_real_power"
+    assert entry.data[CONF_CREATE_UTILITY_METERS]
 
     state = hass.states.get("sensor.some_name_energy")
     assert state
@@ -149,7 +154,7 @@ async def test_attach_to_custom_device(hass: HomeAssistant) -> None:
         },
     )
 
-    result = await select_sensor_type(hass, SensorType.REAL_POWER)
+    result = await select_menu_item(hass, Steps.REAL_POWER)
     assert result["type"] == data_entry_flow.FlowResultType.FORM
 
     await hass.config_entries.flow.async_configure(
@@ -168,7 +173,7 @@ async def test_attach_to_custom_device(hass: HomeAssistant) -> None:
 
 
 async def test_no_error_is_raised_when_device_not_exists(hass: HomeAssistant) -> None:
-    result = await select_sensor_type(hass, SensorType.REAL_POWER)
+    result = await select_menu_item(hass, Steps.REAL_POWER)
     await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
@@ -184,7 +189,7 @@ async def test_no_error_is_raised_when_device_not_exists(hass: HomeAssistant) ->
 
 
 async def test_create_utility_meter_tariff_sensors(hass: HomeAssistant) -> None:
-    result = await select_sensor_type(hass, SensorType.REAL_POWER)
+    result = await select_menu_item(hass, Steps.REAL_POWER)
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
@@ -196,7 +201,7 @@ async def test_create_utility_meter_tariff_sensors(hass: HomeAssistant) -> None:
     )
 
     assert result["type"] == data_entry_flow.FlowResultType.FORM
-    assert result["step_id"] == "utility_meter_options"
+    assert result["step_id"] == Steps.UTILITY_METER_OPTIONS
 
     await hass.config_entries.flow.async_configure(
         result["flow_id"],

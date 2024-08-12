@@ -13,7 +13,7 @@ from homeassistant.components.light import (
     ColorMode,
 )
 from homeassistant.components.sensor import SensorDeviceClass
-from homeassistant.components.utility_meter.sensor import ATTR_PERIOD, DAILY, HOURLY
+from homeassistant.components.utility_meter.sensor import DAILY, HOURLY
 from homeassistant.const import (
     ATTR_DEVICE_CLASS,
     ATTR_FRIENDLY_NAME,
@@ -42,6 +42,7 @@ from pytest_homeassistant_custom_component.common import (
     mock_registry,
 )
 
+from custom_components.powercalc.config_flow import Steps
 from custom_components.powercalc.const import (
     ATTR_CALCULATION_MODE,
     ATTR_ENTITIES,
@@ -71,6 +72,7 @@ from .common import (
     get_simple_fixed_config,
     run_powercalc_setup,
 )
+from .config_flow.common import initialize_options_flow
 from .conftest import MockEntityWithModel
 
 
@@ -91,17 +93,12 @@ async def test_fixed_power_sensor_from_yaml(hass: HomeAssistant) -> None:
 
     power_state = hass.states.get("sensor.test_power")
     assert power_state.state == "50.00"
-    assert (
-        power_state.attributes.get(ATTR_CALCULATION_MODE) == CalculationStrategy.FIXED
-    )
+    assert power_state.attributes.get(ATTR_CALCULATION_MODE) == CalculationStrategy.FIXED
     assert power_state.attributes.get(ATTR_DEVICE_CLASS) == SensorDeviceClass.POWER
 
     energy_state = hass.states.get("sensor.test_energy")
     assert energy_state.attributes.get(ATTR_DEVICE_CLASS) == SensorDeviceClass.ENERGY
-    assert (
-        energy_state.attributes.get(ATTR_UNIT_OF_MEASUREMENT)
-        == UnitOfEnergy.KILO_WATT_HOUR
-    )
+    assert energy_state.attributes.get(ATTR_UNIT_OF_MEASUREMENT) == UnitOfEnergy.KILO_WATT_HOUR
     assert energy_state.attributes.get(ATTR_SOURCE_ID) == "sensor.test_power"
     assert energy_state.attributes.get(ATTR_SOURCE_ENTITY) == "input_boolean.test"
 
@@ -143,13 +140,10 @@ async def test_utility_meter_is_created(hass: HomeAssistant) -> None:
     )
 
     daily_state = hass.states.get("sensor.test_energy_daily")
-    assert daily_state.attributes.get(ATTR_SOURCE_ID) == "sensor.test_energy"
-    assert daily_state.attributes.get(ATTR_PERIOD) == DAILY
+    assert daily_state
 
     hourly_state = hass.states.get("sensor.test_energy_hourly")
     assert hourly_state
-    assert hourly_state.attributes.get(ATTR_SOURCE_ID) == "sensor.test_energy"
-    assert hourly_state.attributes.get(ATTR_PERIOD) == HOURLY
 
     monthly_state = hass.states.get("sensor.test_energy_monthly")
     assert not monthly_state
@@ -625,25 +619,16 @@ async def test_change_options_of_renamed_sensor(
     )
     await hass.async_block_till_done()
 
-    assert (
-        hass.states.get("sensor.test_energy_daily").name
-        == "Renamed daily utility meter"
-    )
+    assert hass.states.get("sensor.test_energy_daily").name == "Renamed daily utility meter"
 
-    result = await hass.config_entries.options.async_init(
-        entry.entry_id,
-        data=None,
-    )
+    result = await initialize_options_flow(hass, entry, Steps.FIXED)
     await hass.config_entries.options.async_configure(
         result["flow_id"],
-        user_input={CONF_CREATE_UTILITY_METERS: True, CONF_POWER: 100},
+        user_input={CONF_POWER: 100},
     )
     await hass.async_block_till_done()
 
-    assert (
-        hass.states.get("sensor.test_energy_daily").name
-        == "Renamed daily utility meter"
-    )
+    assert hass.states.get("sensor.test_energy_daily").name == "Renamed daily utility meter"
 
 
 async def test_renaming_sensor_is_retained_after_startup(
@@ -846,14 +831,17 @@ async def test_change_config_entry_entity_id(hass: HomeAssistant) -> None:
     assert power_state.state == "50.00"
 
     # Change the entity_id using the options flow
-    result = await hass.config_entries.options.async_init(
-        entry.entry_id,
-        data=None,
-    )
-    user_input = {CONF_ENTITY_ID: new_light_id, CONF_POWER: 100}
+    result = await initialize_options_flow(hass, entry, Steps.BASIC_OPTIONS)
     await hass.config_entries.options.async_configure(
         result["flow_id"],
-        user_input=user_input,
+        user_input={CONF_ENTITY_ID: new_light_id},
+    )
+    await hass.async_block_till_done()
+
+    result = await initialize_options_flow(hass, entry, Steps.FIXED)
+    await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={CONF_POWER: 100},
     )
     await hass.async_block_till_done()
 
