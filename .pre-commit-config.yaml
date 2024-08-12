@@ -14,6 +14,7 @@ repos:
       - id: check-symlinks
       - id: check-toml
       - id: check-yaml
+        exclude: mkdocs\.yml$
       - id: debug-statements
       - id: destroyed-symlinks
       - id: end-of-file-fixer
@@ -28,7 +29,7 @@ repos:
       - id: trailing-whitespace
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.5.5
+    rev: v0.5.6
     hooks:
       - id: ruff
         args: [--fix]

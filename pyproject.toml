@@ -84,6 +84,14 @@ description = "Powercalc HA custom component"
 authors = ["Bram Gerritsen <bgerritsen@gmail.com>"]
 readme = "README.md"
 
+[tool.poetry.group.docs]
+optional = true
+
+[tool.poetry.group.docs.dependencies]
+mkdocs = "*"
+mkdocs-material = "*"
+mkdocs-git-revision-date-localized-plugin = "*"
+
 [tool.poetry.group.dev.dependencies]
 pre-commit = "^3.3"
 ruff = "^0.5.0"
